@@ -1,14 +1,13 @@
 import removeAccents from 'remove-accents'
 
 import { $, $$, downloadBlob } from './dom-utils'
-import { addSlash, getFormattedDate } from './util'
+import { addSlash } from './util'
 import pdfBase from '../certificate.pdf'
 import { generatePdf } from './pdf-util'
 import SecureLS from 'secure-ls'
 
 const secureLS = new SecureLS({ encodingType: 'aes' })
 const clearDataSnackbar = $('#snackbar-cleardata')
-const storeDataInput = $('#field-storedata')
 const conditions = {
   '#field-firstname': {
     length: 1,
@@ -30,12 +29,6 @@ const conditions = {
   },
   '#field-zipcode': {
     pattern: /\d{5}/g,
-  },
-  '#field-datesortie': {
-    pattern: /\d{4}-\d{2}-\d{2}/g,
-  },
-  '#field-heuresortie': {
-    pattern: /\d{2}:\d{2}/g,
   },
 }
 
@@ -60,11 +53,7 @@ function validateAriaFields () {
 }
 
 function updateSecureLS (formInputs) {
-  if (wantDataToBeStored() === true) {
-    secureLS.set('profile', getProfile(formInputs))
-  } else {
-    clearSecureLS()
-  }
+  secureLS.set('profile', getProfile(formInputs))
 }
 
 function clearSecureLS () {
@@ -74,12 +63,6 @@ function clearSecureLS () {
 function clearForm () {
   const formProfile = $('#form-profile')
   formProfile.reset()
-  storeDataInput.checked = false
-}
-
-function setCurrentDate (releaseDateInput) {
-  const currentDate = new Date()
-  releaseDateInput.value = getFormattedDate(currentDate)
 }
 
 function showSnackbar (snackbarToShow, showDuration = 6000) {
@@ -92,13 +75,14 @@ function showSnackbar (snackbarToShow, showDuration = 6000) {
   }, showDuration)
 }
 
-export function wantDataToBeStored () {
-  return storeDataInput.checked
-}
+function toggleAutomaticFormDisplay () {
+  const automaticForm = $('#automaticForm')
 
-export function setReleaseDateTime (releaseDateInput) {
-  const loadedDate = new Date()
-  releaseDateInput.value = getFormattedDate(loadedDate)
+  if (secureLS.get('profile')) {
+    automaticForm.classList.add('d-none')
+  } else {
+    automaticForm.classList.remove('d-none')
+  }
 }
 
 export function toAscii (string) {
@@ -114,10 +98,6 @@ export function getProfile (formInputs) {
   const fields = {}
   for (const field of formInputs) {
     let value = field.value
-    if (field.id === 'field-datesortie') {
-      const dateSortie = field.value.split('-')
-      value = `${dateSortie[2]}/${dateSortie[1]}/${dateSortie[0]}`
-    }
     if (typeof value === 'string') {
       value = toAscii(value)
     }
@@ -126,20 +106,11 @@ export function getProfile (formInputs) {
   return fields
 }
 
-export function getReasons (reasonInputs) {
-  const reasons = reasonInputs
-    .filter(input => input.checked)
-    .map(input => input.value).join(', ')
-  return reasons
-}
-
-export function prepareInputs (formInputs, reasonInputs, reasonFieldset, reasonAlert, snackbar, releaseDateInput) {
+export function prepareInputs (formInputs, snackbar) {
   const lsProfile = secureLS.get('profile')
 
-  // Continue to store data if already stored
-  storeDataInput.checked = !!lsProfile
   formInputs.forEach((input) => {
-    if (input.name && lsProfile && input.name !== 'datesortie' && input.name !== 'heuresortie' && input.name !== 'field-reason') {
+    if (input.name && lsProfile) {
       input.value = lsProfile[input.name]
     }
     const exempleElt = input.parentNode.parentNode.querySelector('.exemple')
@@ -164,39 +135,21 @@ export function prepareInputs (formInputs, reasonInputs, reasonFieldset, reasonA
     }
   })
 
-  reasonInputs.forEach(radioInput => {
-    radioInput.addEventListener('change', function (event) {
-      const isInError = reasonInputs.every(input => !input.checked)
-      reasonFieldset.classList.toggle('fieldset-error', isInError)
-      reasonAlert.classList.toggle('hidden', !isInError)
-    })
-  })
   $('#cleardata').addEventListener('click', () => {
     clearSecureLS()
     clearForm()
-    setCurrentDate(releaseDateInput)
+    toggleAutomaticFormDisplay()
     showSnackbar(clearDataSnackbar, 3000)
-  })
-  $('#field-storedata').addEventListener('click', () => {
-    updateSecureLS(formInputs)
   })
   $('#generate-btn').addEventListener('click', async (event) => {
     event.preventDefault()
-
-    const reasons = getReasons(reasonInputs)
-    if (!reasons) {
-      reasonFieldset.classList.add('fieldset-error')
-      reasonAlert.classList.remove('hidden')
-      reasonFieldset.scrollIntoView && reasonFieldset.scrollIntoView()
-      return
-    }
 
     const invalid = validateAriaFields()
     if (invalid) {
       return
     }
     updateSecureLS(formInputs)
-    const pdfBlob = await generatePdf(getProfile(formInputs), reasons, pdfBase)
+    const pdfBlob = await generatePdf(getProfile(formInputs), pdfBase)
 
     const creationInstant = new Date()
     const creationDate = creationInstant.toLocaleDateString('fr-CA')
@@ -206,16 +159,13 @@ export function prepareInputs (formInputs, reasonInputs, reasonFieldset, reasonA
 
     downloadBlob(pdfBlob, `attestation-${creationDate}_${creationHour}.pdf`)
     showSnackbar(snackbar, 6000)
+    toggleAutomaticFormDisplay()
   })
 }
 
 export function prepareForm () {
   const formInputs = $$('#form-profile input')
   const snackbar = $('#snackbar')
-  const reasonInputs = [...$$('input[name="field-reason"]')]
-  const reasonFieldset = $('#reason-fieldset')
-  const reasonAlert = reasonFieldset.querySelector('.msg-alert')
-  const releaseDateInput = $('#field-datesortie')
-  setReleaseDateTime(releaseDateInput)
-  prepareInputs(formInputs, reasonInputs, reasonFieldset, reasonAlert, snackbar, releaseDateInput)
+  toggleAutomaticFormDisplay()
+  prepareInputs(formInputs, snackbar)
 }

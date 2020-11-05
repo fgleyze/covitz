@@ -1,4 +1,4 @@
-import { generateQR } from './util'
+import { generateQR, pad2Zero } from './util'
 import { PDFDocument, StandardFonts } from 'pdf-lib'
 
 const ys = {
@@ -13,12 +13,25 @@ const ys = {
   enfants: 211,
 }
 
-export async function generatePdf (profile, reasons, pdfBase) {
+export async function generatePdf (profile, pdfBase) {
   const creationInstant = new Date()
   const creationDate = creationInstant.toLocaleDateString('fr-FR')
   const creationHour = creationInstant
     .toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
     .replace(':', 'h')
+
+  const heureSortie = new Date()
+  heureSortie.setMinutes(heureSortie.getMinutes() - Math.floor(Math.random() * (35 - 25 + 1) + 25))
+  profile.heuresortie = heureSortie
+    .toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+
+  const dateSortie = new Date()
+  const day = pad2Zero(dateSortie.getDate())
+  const month = pad2Zero(dateSortie.getMonth() + 1) // Les mois commencent à 0
+  const year = dateSortie.getFullYear()
+  profile.datesortie = `${day}/${month}/${year}`
+
+  const reasons = 'sport_animaux'
 
   const {
     lastname,
